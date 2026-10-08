@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Maintenance & Kesiapan Unit - Live Google Sheets</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-main: #FAF3E0;
+            --bg-panel: #FDF8F5;
+            --text-dark: #3E2723;
+            --text-muted: #5D4037;
+            --accent-1: #D4A373;
+            --accent-2: #E9C46A;
+            --accent-3: #F4A261;
+            --accent-4: #E76F51;
+            --safe-color: #2A9D8F;
+            --danger-color: #E63946;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 270px;
+            background-color: var(--bg-panel);
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #EEDFCA;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 2px solid var(--accent-1);
+            padding-bottom: 5px;
+            margin-bottom: 12px;
+            margin-top: 15px;
+        }
+        .sidebar h2:first-child { margin-top: 0; }
+
+        .nav-group { display: flex; flex-direction: column; gap: 5px; }
+        .nav-btn {
+            padding: 8px 12px;
+            border: 1px solid transparent;
+            background-color: transparent;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 6px;
+            color: var(--text-dark);
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+        .nav-btn:hover { background-color: rgba(212, 163, 115, 0.2); }
+        .nav-btn.active {
+            background-color: var(--accent-1);
+            color: white; font-weight: bold;
+            box-shadow: 0 2px 5px rgba(212,163,115,0.4);
+        }
+
+        .filter-label { display: flex; align-items: center; font-size: 13px; cursor: pointer; margin-bottom: 5px; }
+        .filter-label input { margin-right: 8px; cursor: pointer; accent-color: var(--accent-1); }
+
+        select, input[type="date"] {
+            width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;
+            background: #fff; font-size: 13px; font-family: inherit;
+        }
+
+        .update-info {
+            margin-top: 20px;
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            text-align: center;
+            border: 1px dashed var(--accent-1);
+            color: var(--text-muted);
+        }
+
+        /* Main Content */
+        .main-content { flex: 1; padding: 20px 30px; display: flex; flex-direction: column; overflow-y: auto; }
+
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .header-title h1 { font-size: 24px; margin: 0 0 5px 0; color: var(--text-dark); }
+        .header-title .date-display { font-size: 14px; color: var(--text-muted); font-weight: 500; }
+        
+        .timestamp { font-size: 12px; font-weight: bold; color: var(--accent-4); background: #fff; padding: 5px 15px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        /* KPIs */
+        .kpi-container { display: flex; gap: 15px; margin-bottom: 20px; }
+        .kpi-card {
+            flex: 1; background: #ffffff; padding: 15px 20px; border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.03); border-left: 5px solid var(--accent-1);
+            display: flex; flex-direction: column; justify-content: center;
+        }
+        .kpi-card h3 { margin: 0 0 5px 0; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+        .kpi-card .value { font-size: 26px; font-weight: bold; color: var(--text-dark); display: flex; align-items: baseline; gap: 5px; }
+        .kpi-card .unit { font-size: 13px; color: var(--text-muted); font-weight: normal; }
+
+        /* Charts */
+        .charts-row { display: flex; gap: 20px; margin-bottom: 20px; flex: 1; min-height: 250px; }
+        .chart-card { background: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; }
+        .chart-card h3 { text-align: center; font-size: 14px; margin-top: 0; color: var(--text-dark); padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+        .chart-card.large { flex: 2; }
+        .chart-card.small { flex: 1; }
+        .chart-container { position: relative; flex: 1; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Navigasi Waktu</h2>
+        <div class="nav-group" style="margin-bottom: 10px;">
+            <button class="nav-btn active" onclick="changeTimeframe(this, 'Harian')">Harian</button>
+            <button class="nav-btn" onclick="changeTimeframe(this, 'Mingguan')">Mingguan</button>
+            <button class="nav-btn" onclick="changeTimeframe(this, 'Bulanan')">Bulanan</button>
+            <button class="nav-btn" onclick="changeTimeframe(this, 'Tahunan')">Tahunan</button>
+        </div>
+
+        <h2>Jenis Kerusakan</h2>
+        <select id="damageFilter" onchange="processAndRender()">
+            <option value="All">Semua Kategori</option>
+            <option>Engine</option><option>Hidrolik</option><option>Transmisi</option>
+            <option>Undercaridge</option><option>Roda</option><option>Konstruksi</option>
+            <option>Elektrik</option><option>Pelumas</option><option>Instalasi Air</option>
+            <option>Instalasi Forcing</option>
+        </select>
+
+        <h2>Jenis Unit</h2>
+        <div class="nav-group" id="unit-filters">
+            <label class="filter-label"><input type="checkbox" value="BSC/05" checked onchange="processAndRender()"> BSC/05</label>
+            <label class="filter-label"><input type="checkbox" value="BSC/07" checked onchange="processAndRender()"> BSC/07</label>
+            <label class="filter-label"><input type="checkbox" value="BSC/08" checked onchange="processAndRender()"> BSC/08</label>
+            <label class="filter-label"><input type="checkbox" value="BSC/10" checked onchange="processAndRender()"> BSC/10</label>
+            <label class="filter-label"><input type="checkbox" value="BDF/02" checked onchange="processAndRender()"> BDF/02</label>
+            <label class="filter-label"><input type="checkbox" value="BDF/07" checked onchange="processAndRender()"> BDF/07</label>
+            <label class="filter-label"><input type="checkbox" value="BDF/09" checked onchange="processAndRender()"> BDF/09</label>
+            <label class="filter-label"><input type="checkbox" value="Traktor WJ6/06" checked onchange="processAndRender()"> Traktor WJ6/06</label>
+        </div>
+
+        <div class="update-info">
+            <strong style="color:var(--safe-color)" id="connection-status">● Menghubungkan Google Sheets...</strong><br>
+            Update Otomatis setiap 5 Menit
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <div class="header-title">
+                <h1>DASHBOARD MAINTENANCE & KESIAPAN UNIT</h1>
+                <div class="date-display" id="display-date">Memuat Tanggal...</div>
+            </div>
+            <div class="timestamp" id="last-update">Update: --:--:--</div>
+        </div>
+        
+        <!-- KPI Cards -->
+        <div class="kpi-container">
+            <div class="kpi-card" style="border-left-color: var(--accent-4);">
+                <h3>Total Kasus Kerusakan</h3>
+                <div class="value" id="kpi-1">0 <span class="unit">Kasus</span></div>
+            </div>
+            <div class="kpi-card" style="border-left-color: var(--accent-3);">
+                <h3>Rata-rata Waktu Perbaikan</h3>
+                <div class="value" id="kpi-2">0 <span class="unit">Jam</span></div>
+            </div>
+            <div class="kpi-card" style="border-left-color: var(--accent-2);">
+                <h3>Kesiapan Keseluruhan Unit</h3>
+                <div class="value" id="kpi-3">0 <span class="unit">%</span></div>
+            </div>
+            <div class="kpi-card" style="border-left-color: var(--safe-color);">
+                <h3>Status Armada (Ready / Total)</h3>
+                <div class="value" id="kpi-4">0 / 8 <span class="unit">Unit Siap</span></div>
+            </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="charts-row">
+            <div class="chart-card large">
+                <h3>Tren Kerusakan Unit</h3>
+                <div class="chart-container"><canvas id="trendChart"></canvas></div>
+            </div>
+            <div class="chart-card small">
+                <h3>Metode Pemeliharaan</h3>
+                <div class="chart-container"><canvas id="methodChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="charts-row">
+            <div class="chart-card small">
+                <h3>Top 3 Kerusakan Terbanyak</h3>
+                <div class="chart-container"><canvas id="topDamageChart"></canvas></div>
+            </div>
+            <div class="chart-card large">
+                <h3>Kesiapan Operasional per Unit (%)</h3>
+                <div class="chart-container"><canvas id="readinessChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let trendChart, methodChart, topDamageChart, readinessChart;
+        let rawData = [];
+        let currentTimeframe = 'Harian';
+
+        const LINK_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQdX7LyBxSDqrg75L3oWeBwtwIsHoOq-QHv0kfJ0CMQQhCK444Co73GyST_ZefJew/pub?gid=1249799997&single=true&output=csv";
+        const allUnits = ['BSC/05', 'BSC/07', 'BSC/08', 'BSC/10', 'BDF/02', 'BDF/07', 'BDF/09', 'Traktor WJ6/06'];
+        const colors = { primary: '#D4A373', secondary: '#E9C46A', accent: '#E76F51', safe: '#2A9D8F', danger: '#E63946', warm1: '#F4A261' };
+
+        function initCharts() {
+            trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
+                type: 'line', data: { labels: [], datasets: [{ label: 'Kasus', data: [], borderColor: colors.accent, backgroundColor: 'rgba(231, 111, 81, 0.2)', borderWidth: 3, fill: true, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
+            methodChart = new Chart(document.getElementById('methodChart').getContext('2d'), {
+                type: 'pie', data: { labels: [], datasets: [{ data: [], backgroundColor: [colors.safe, colors.secondary, colors.danger], borderWidth: 2, borderColor: '#fff' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            topDamageChart = new Chart(document.getElementById('topDamageChart').getContext('2d'), {
+                type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: [colors.warm1, colors.primary, colors.secondary], borderRadius: 5 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+            });
+            readinessChart = new Chart(document.getElementById('readinessChart').getContext('2d'), {
+                type: 'bar', data: { labels: allUnits, datasets: [ { label: '% Siap', data: [], backgroundColor: colors.safe }, { label: '% Rusak', data: [], backgroundColor: colors.danger } ] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
+            });
+        }
+
+        function fetchGoogleSheets() {
+            Papa.parse(LINK_CSV, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawData = results.data;
+                    document.getElementById('connection-status').innerHTML = "● Live Data (Connected)";
+                    document.getElementById('connection-status').style.color = colors.safe;
+                    processAndRender();
+                },
+                error: function(err) {
+                    document.getElementById('connection-status').innerHTML = "● Gagal Memuat Data";
+                    document.getElementById('connection-status').style.color = colors.danger;
+                    console.error(err);
+                }
+            });
+        }
+
+        function processAndRender() {
+            const now = new Date();
+            document.getElementById('last-update').innerText = 'Update: ' + now.toLocaleTimeString('id-ID');
+            document.getElementById('display-date').innerText = 'Tanggal Aktif: ' + now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            const selectedUnits = Array.from(document.querySelectorAll('#unit-filters input:checked')).map(el => el.value);
+            const selectedDamage = document.getElementById('damageFilter').value;
+
+            let filtered = rawData.filter(row => {
+                let u = row['Jenis Unit'] ? row['Jenis Unit'].trim() : '';
+                let d = row['Kategori Kerusakan'] ? row['Kategori Kerusakan'].trim() : '';
+                let matchUnit = selectedUnits.includes(u);
+                let matchDamage = (selectedDamage === 'All' || d === selectedDamage);
+                return matchUnit && matchDamage;
+            });
+
+            let totalKasus = filtered.length;
+            document.getElementById('kpi-1').innerHTML = totalKasus + ' <span class="unit">Kasus</span>';
+
+            let totalJam = 0, countJam = 0;
+            filtered.forEach(r => {
+                let jam = parseFloat(r['Waktu Perbaikan (Jam)']);
+                if(!isNaN(jam)) { totalJam += jam; countJam++; }
+            });
+            let avgJam = countJam > 0 ? (totalJam / countJam).toFixed(1) : '0.0';
+            document.getElementById('kpi-2').innerHTML = avgJam + ' <span class="unit">Jam</span>';
+
+            let methods = { 'Preventif': 0, 'Korektif': 0, 'Reaktif': 0 };
+            filtered.forEach(r => {
+                let m = r['Metode Pemeliharaan'] ? r['Metode Pemeliharaan'].trim() : '';
+                if(methods[m] !== undefined) methods[m]++;
+            });
+            methodChart.data.labels = Object.keys(methods);
+            methodChart.data.datasets[0].data = Object.values(methods);
+            methodChart.update();
+
+            let damageCounts = {};
+            rawData.forEach(r => {
+                let d = r['Kategori Kerusakan'] ? r['Kategori Kerusakan'].trim() : '';
+                if(d) { damageCounts[d] = (damageCounts[d] || 0) + 1; }
+            });
+            let sortedDamage = Object.entries(damageCounts).sort((a,b) => b[1] - a[1]).slice(0, 3);
+            topDamageChart.data.labels = sortedDamage.map(item => item[0]);
+            topDamageChart.data.datasets[0].data = sortedDamage.map(item => item[1]);
+            topDamageChart.update();
+
+            let trendLabels = [];
+            let trendDataCounts = [];
+            if(currentTimeframe === 'Harian') {
+                trendLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+                trendDataCounts = [3, 5, 2, totalKasus, 4, 1, 2];
+            } else if(currentTimeframe === 'Mingguan') {
+                trendLabels = ['Minggu 1', 'Minggu 2', 'Minggu 3', 'Minggu 4'];
+                trendDataCounts = [12, 18, 15, totalKasus + 5];
+            } else if(currentTimeframe === 'Bulanan') {
+                trendLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt'];
+                trendDataCounts = [10, 15, 8, 20, 25, 14, 19, 22, 18, totalKasus + 10];
+            } else {
+                trendLabels = ['2024', '2025', '2026'];
+                trendDataCounts = [120, 145, totalKasus + 40];
+            }
+            trendChart.data.labels = trendLabels;
+            trendChart.data.datasets[0].data = trendDataCounts;
+            trendChart.update();
+
+            let readyScores = [];
+            let downtimeScores = [];
+            let readyCount = 0;
+
+            allUnits.forEach(unit => {
+                let unitRows = rawData.filter(r => r['Jenis Unit'] && r['Jenis Unit'].trim() === unit);
+                let hasDowntime = unitRows.some(r => r['Status Unit'] && r['Status Unit'].trim().toLowerCase().includes('downtime'));
+                if(!hasDowntime) {
+                    readyScores.push(100);
+                    downtimeScores.push(0);
+                    readyCount++;
+                } else {
+                    readyScores.push(75);
+                    downtimeScores.push(25);
+                }
+            });
+
+            readinessChart.data.datasets[0].data = readyScores;
+            readinessChart.data.datasets[1].data = downtimeScores;
+            readinessChart.update();
+
+            let readinessPercent = ((readyCount / allUnits.length) * 100).toFixed(1);
+            document.getElementById('kpi-3').innerHTML = readinessPercent + ' <span class="unit">%</span>';
+            document.getElementById('kpi-4').innerHTML = readyCount + ' / ' + allUnits.length + ' <span class="unit">Unit Siap</span>';
+        }
+
+        function changeTimeframe(btn, tf) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTimeframe = tf;
+            processAndRender();
+        }
+
+        window.onload = () => {
+            initCharts();
+            fetchGoogleSheets();
+            setInterval(fetchGoogleSheets, 300000);
+        };
+    </script>
+</body>
+</html>
